@@ -1,0 +1,1531 @@
+---
+title: "MScProjectR"
+author: '2458795'
+date: "2024-06-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#Loading required packages
+
+library(tidyverse) # For data manipulation and visualization
+library(lme4) # To run linear-mexed effect regression (lmer) statistical test
+library(lmerTest) # To include p-values in the lmer result summary
+library(emmeans) # Performing post-hoc comparisons on lmer models
+library(ggsignif) # To add significance brackets and annotations to ggplot2 plots
+library(pwr) # For power analysis and sample size calculation
+library(patchwork) # For combining multiple ggplot2 plots into a single figure
+
+```
+
+```{r}
+# Run the data file for Griess assay (LPS-HCA)
+
+griess_lpshca <- read_csv("griess_lpshca.csv")
+
+## Plotting box plot for Griess assay data
+
+# Convert the levels of the "Treatment" variable to match the preferred order
+
+my_order <- c("VLPS_VHCA", "LPS_VHCA", "VLPS_HCA", "LPS_HCA")
+
+# Converting the treatment variable to a factor and setting the levels according to the specified order
+
+griess_lpshca$Treatment <- factor(griess_lpshca$Treatment, levels = my_order)
+
+p1 <- ggplot(griess_lpshca, aes(x = Treatment, y = Value, fill = Treatment)) +
+  geom_boxplot(fill = "gray", color = "black") +
+  stat_summary(fun = "mean", geom = "point", shape = 18, size = 3, color = "black") +
+  labs(x = "Treatment Groups",
+       y = "NO Release (% of Control)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 0),  # Rotate x-axis labels
+        axis.title = element_text(size = 12),  # Adjust axis label size
+        axis.text = element_text(size = 10),   # Adjust axis text size
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Adjust plot title size and weight
+        panel.grid.major = element_blank(),  # Remove major gridlines
+        panel.grid.minor = element_blank(),  # Remove minor gridlines
+        panel.border = element_blank(),  # Add border around plot area
+        plot.background = element_rect(fill = "white"),  # Set plot background color
+        legend.position = "none") + 
+  geom_signif(comparisons = list(
+      c("VLPS_VHCA", "LPS_VHCA"),
+      c("VLPS_VHCA", "LPS_HCA"),
+      c("LPS_VHCA", "VLPS_HCA"),
+      c("VLPS_HCA", "LPS_HCA")),
+    annotations = c("***", "***", "***", "***"),
+    map_signif_level = TRUE, 
+    y_position = c(1500, 1700, 1900, 2000),
+  tip_length = 0.02,
+  textsize = 4,
+  vjust = -0.2)
+  
+# Dataset structure inspection prior running the statistical test
+str(griess_lpshca)
+
+# Calculating the logarithmic value for original data points (Cvalue) column in the dataframe 
+# Adding 1 to avoid taking the logarithm of data points having value ‘0’
+griess_lpshca$log_value <- log(griess_lpshca$Nvalue + 1)
+
+# Saving the modified dataset
+
+write.csv(griess_lpshca, "griess_lpshca.csv")
+
+# Converting the variables to 'factor variables' to run 'lmer'
+
+griess_lpshca$LPS <- as.factor(griess_lpshca$LPS)
+griess_lpshca$Treatment <- as.factor(griess_lpshca$Treatment)
+griess_lpshca$HCA <- as.factor(griess_lpshca$HCA)
+griess_lpshca$Day <- as.factor(griess_lpshca$Day)
+
+# Fitting the linear mixed-effect model/Running 'lmer' statistical test for Griess assay data
+griess_lpshca_lmer <- lmer(log_value ~ LPS * HCA + (1 | Day), data = griess_lpshca)
+summary(griess_lpshca_lmer)
+
+#Calculating Estimated Marginal Means (EMM)
+griess_lpshca_emm <- emmeans(griess_lpshca_lmer, ~ LPS * HCA)
+
+# Perform Tukey's Post-hoc Test for Griess assay data
+
+griess_lpshca_tukey <- pairs(griess_lpshca_emm, adjust = "tukey")
+summary(griess_lpshca_tukey)
+
+#Power calculation (griess - LPS_HCA)
+
+mean_difference <- 1.24 - 0.19  # Difference between HCA+LPS and veh+LPS
+pooled_sd <- (0.12 + 0.17) / 2  # Average of the two standard deviations
+
+cohens_d <- mean_difference / pooled_sd
+print(cohens_d)
+
+power_analysis <- pwr.t.test(d = cohens_d,
+                             sig.level = 0.05,
+                             power = 0.80,
+                             type = "two.sample",
+                             alternative = "two.sided")
+print(power_analysis)
+
+# Checking normality of data
+
+hist(griess_lpshca$Nvalue, main = "Histogram of XTT Assay Data")
+hist(griess_lpshca$log_value, main = "Histogram of XTT Assay Data")
+
+qqnorm(griess_lpshca$Nvalue)
+qqline(griess_lpshca$log_value, col = "red")
+
+hist(resid(griess_lpshca_lmer), breaks = 20, main = "Histogram of Residuals", xlab = "Residuals")
+
+```
+
+```{r}
+# Run the data file for XTT assay data (LPS-HCA)
+
+xtt_lpshca <- read_csv("xtt_lpshca.csv")
+
+my_order <- c("VLPS_VHCA", "LPS_VHCA", "VLPS_HCA", "LPS_HCA")
+
+xtt_lpshca$Treatment <- factor(xtt_lpshca$Treatment, levels = my_order)
+
+p2 <- ggplot(xtt_lpshca, aes(x = Treatment, y = Value, fill = Treatment)) +
+  geom_boxplot(fill = "gray", color = "black") +
+  stat_summary(fun = "mean", geom = "point", shape = 18, size = 3, color = "black") +
+  labs(x = "Treatment Groups",
+       y = "Cell proliferation (% of Control)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 0),  # Rotate x-axis labels
+        axis.title = element_text(size = 12),  # Adjust axis label size
+        axis.text = element_text(size = 10),   # Adjust axis text size
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Adjust plot title size and weight
+        panel.grid.major = element_blank(),  # Remove major gridlines
+        panel.grid.minor = element_blank(),  # Remove minor gridlines
+        panel.border = element_blank(),  # Remove border around plot area
+        plot.background = element_rect(fill = "white"), # Set plot background color
+        legend.position = "none") 
+
+# Dataset structure inspection prior running the statistical test
+
+str(xtt_lpshca)
+
+# Calculating the logarithmic value for original data points - Cvalue column in the dataframe
+
+xtt_lpshca$log_value <- log(xtt_lpshca$Cvalue)
+
+# Saving the modified dataset
+
+write.csv(xtt_lpshca, "xtt_lpshca.csv")
+
+# Converting the variables to 'factor variables' to run 'lmer'
+
+xtt_lpshca$LPS <- as.factor(griess_rhca$LPS)
+xtt_lpshca$Treatment <- as.factor(xtt_lpshca$Treatment)
+xtt_lpshca$HCA <- as.factor(xtt_lpshca$HCA)
+xtt_lpshca$Day <- as.factor(xtt_lpshca$Day)
+
+# Fitting the linear mixed-effect model/Running 'lmer' statistical test for Griess assay data
+xtt_lpshca_lmer <- lmer(log_value ~ LPS * HCA + (1 | Day), data = xtt_lpshca)
+summary(xtt_lpshca_lmer)
+
+#Calculating Estimated Marginal Means (EMM)
+xtt_lpshca_emm <- emmeans(xtt_lpshca_lmer, ~ LPS * HCA)
+
+# Perform Tukey's Post-hoc Test for Griess assay data
+
+xtt_lpshca_tukey <- pairs(xtt_lpshca_emm, adjust = "tukey")
+summary(xtt_lpshca_tukey)
+
+#Power calculation (XTT - LPS_HCA)
+
+mean_difference <- 0.18 - 0.12  # Difference between HCA+LPS and veh+LPS
+pooled_sd <- (0.13 + 0.18) / 2  # Average of the two standard deviations
+
+cohens_d <- mean_difference / pooled_sd
+print(cohens_d)
+
+power_analysis <- pwr.t.test(d = cohens_d,
+                             sig.level = 0.05,
+                             power = 0.80,
+                             type = "two.sample",
+                             alternative = "two.sided")
+print(power_analysis)
+
+# Checking normality of data. 
+
+hist(xtt_lpshca$Cvalue, main = "Histogram of griess Assay Data")
+hist(xtt_lpshca$log_value, main = "Histogram of griess Assay Data")
+
+qqnorm(xtt_lpshca$Cvalue)
+qqline(xtt_lpshca$log_value, col = "red")
+
+hist(resid(xtt_lpshca_lmer), breaks = 20, main = "Histogram of Residuals", xlab = "Residuals")
+
+```
+
+```{r}
+# Run the data file for Griess assay (R-HCA)
+
+griess_rhca <- read_csv("griess_rhca.csv")
+
+## Plotting box plot for Griess assay data
+
+# Convert the levels of the "Treatment" variable to match the preferred order
+
+my_order <- c("VR_VHCA", "R_VHCA", "VR_HCA", "R_HCA")
+
+griess_rhca$Treatment <- factor(griess_rhca$Treatment, levels = my_order)
+
+p3 <- ggplot(griess_rhca, aes(x = Treatment, y = Value, fill = Treatment)) +
+  geom_boxplot(fill = "gray", color = "black") +
+  stat_summary(fun = "mean", geom = "point", shape = 18, size = 3, color = "black") +
+  labs(x = "Treatment Groups",
+       y = "NO Release (% of Control)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 0),  # Rotate x-axis labels
+        axis.title = element_text(size = 12),  # Adjust axis label size
+        axis.text = element_text(size = 10),   # Adjust axis text size
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Adjust plot title size and weight
+        panel.grid.major = element_blank(),  # Remove major gridlines
+        panel.grid.minor = element_blank(),  # Remove minor gridlines
+        panel.border = element_blank(),  # Remove border around plot area
+        plot.background = element_rect(fill = "white"), # Set plot background color
+        legend.position = "none") +
+  geom_signif(comparisons = list(
+      c("VR_VHCA", "R_VHCA"),
+      c("VR_VHCA", "R_HCA"),
+      c("R_VHCA", "VR_HCA"),
+      c("VR_HCA", "R_HCA")),
+    annotations = c("***", "***", "***", "***"),
+    map_signif_level = TRUE, 
+    y_position = c(1500, 1700, 1900, 2000),
+  tip_length = 0.02,
+  textsize = 4,
+  vjust = -0.2)
+    
+# Dataset structure inspection prior running the statistical test
+
+str(griess_ral)
+
+griess_rhca$log_value <- log(griess_rhca$Nvalue + 1)
+
+write.csv(griess_rhca, "griess_rhca.csv")
+
+# Converting the variables to 'factor variables' to run 'lmer'
+
+griess_rhca$R <- as.factor(griess_rhca$R)
+griess_rhca$Treatment <- as.factor(griess_rhca$Treatment)
+griess_rhca$HCA <- as.factor(griess_rhca$HCA)
+griess_rhca$Day <- as.factor(griess_rhca$Day)
+
+# Fitting the linear mixed-effect model/Running 'lmer' statistical test for Griess assay data
+griess_rhca_lmer <- lmer(log_value ~ R * HCA + (1 | Day), data = griess_rhca)
+summary(griess_rhca_lmer)
+
+#Calculating Estimated Marginal Means (EMM)
+griess_rhca_emm <- emmeans(griess_rhca_lmer, ~ R * HCA)
+
+# Perform Tukey's Post-hoc Test for Griess assay data
+
+griess_rhca_tukey <- pairs(griess_rhca_emm, adjust = "tukey")
+summary(griess_rhca_tukey)
+
+#Power calculation (griess - R_HCA)
+
+mean_difference <- 1.44 - 0.23  # Difference between HCA+LPS and veh+LPS
+pooled_sd <- (0.14 + 0.20) / 2  # Average of the two standard deviations
+
+cohens_d <- mean_difference / pooled_sd
+print(cohens_d)
+
+power_analysis <- pwr.t.test(d = cohens_d,
+                             sig.level = 0.05,
+                             power = 0.80,
+                             type = "two.sample",
+                             alternative = "two.sided")
+print(power_analysis)
+
+# Checking normality of data
+
+hist(griess_rhca$Nvalue, main = "Histogram of XTT Assay Data")
+hist(griess_rhca$log_value, main = "Histogram of XTT Assay Data")
+
+qqnorm(griess_rhca$Nvalue)
+qqline(griess_rhca$log_value, col = "red")
+
+hist(resid(griess_rhca_lmer), breaks = 20, main = "Histogram of Residuals", xlab = "Residuals")
+```
+
+```{r}
+# Run the data file for XTT assay (R-HCA) 
+
+xtt_rhca <- read_csv("xtt_rhca.csv")
+
+## Plotting box plot for Griess assay data
+
+# Convert the levels of the "Treatment" variable to match the preferred order
+
+my_order <- c("VR_VHCA", "R_VHCA", "VR_HCA", "R_HCA")
+
+xtt_rhca$Treatment <- factor(xtt_rhca$Treatment, levels = my_order)
+
+p4 <- ggplot(xtt_rhca, aes(x = Treatment, y = Value, fill = Treatment)) +
+  geom_boxplot(fill = "gray", color = "black") +
+  stat_summary(fun = "mean", geom = "point", shape = 18, size = 3, color = "black") +
+  labs(x = "Treatment Groups",
+       y = "Cell Proliferation (% of Control)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 0),  # Rotate x-axis labels
+        axis.title = element_text(size = 12),  # Adjust axis label size
+        axis.text = element_text(size = 10),   # Adjust axis text size
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Adjust plot title size and weight
+        panel.grid.major = element_blank(),  # Remove major gridlines
+        panel.grid.minor = element_blank(),  # Remove minor gridlines
+        panel.border = element_blank(),  # Remove border around plot area
+        plot.background = element_rect(fill = "white"), # Set plot background color
+        legend.position = "none")
+    
+# Dataset structure inspection prior running the statistical test
+
+str(xtt_rhca)
+
+xtt_rhca$log_value <- log(xtt_rhca$Cvalue)
+
+write.csv(xtt_rhca, "xtt_rhca.csv")
+
+# Converting the variables to 'factor variables' to run 'lmer'
+
+xtt_rhca$R <- as.factor(xtt_rhca$R)
+xtt_rhca$Treatment <- as.factor(xtt_rhca$Treatment)
+xtt_rhca$HCA <- as.factor(xtt_rhca$HCA)
+xtt_rhca$Day <- as.factor(xtt_rhca$Day)
+
+# Fitting the linear mixed-effect model/Running 'lmer' statistical test for Griess assay data
+xtt_rhca_lmer <- lmer(log_value ~ R * HCA + (1 | Day), data = xtt_rhca)
+summary(xtt_rhca_lmer)
+
+#Calculating Estimated Marginal Means (EMM)
+xtt_rhca_emm <- emmeans(xtt_rhca_lmer, ~ R * HCA)
+
+# Perform Tukey's Post-hoc Test for Griess assay data
+
+xtt_rhca_tukey <- pairs(xtt_rhca_emm, adjust = "tukey")
+summary(xtt_rhca_tukey)
+
+#Power calculation (XTT - R_HCA)
+
+mean_difference <- 0.21 - -0.09  # Difference between HCA+LPS and veh+LPS
+pooled_sd <- (0.18 + 0.26) / 2  # Average of the two standard deviations
+
+cohens_d <- mean_difference / pooled_sd
+print(cohens_d)
+
+power_analysis <- pwr.t.test(d = cohens_d,
+                             sig.level = 0.05,
+                             power = 0.80,
+                             type = "two.sample",
+                             alternative = "two.sided")
+print(power_analysis)
+
+# Checking normality of data. 
+
+hist(xtt_rhca$Cvalue, main = "Histogram of griess Assay Data")
+hist(xtt_rhca$log_value, main = "Histogram of griess Assay Data")
+
+qqnorm(xtt_rhca$Cvalue)
+qqline(xtt_rhca$log_value, col = "red")
+
+hist(resid(xtt_rhca_lmer), breaks = 20, main = "Histogram of Residuals", xlab = "Residuals")
+
+```
+
+```{r}
+combined_plot1 <- (p1 + p2) / (p3 + p4) + # Arranging plots p1 and p2 on the top row and p3 and p4 on the bottom row 
+  plot_annotation(tag_levels = 'A') + # Adding annotation tags (A, B, C, etc.) to the plots for identification 
+  plot_layout(guides = "collect") + # Colecting & combining legends from all plots into a single legend theme
+  theme(plot.margin = margin(15, 15, 15, 15)) # Setting margins around the entire plot layout for better spacing
+print(combined_plot1) # Printing the combined plot
+
+# Saving the combined plot to a PNG file with specified dimensions
+
+ggsave("combined_boxplot1.png", combined_plot1, width = 15, height = 10)
+```
+
+```{r}
+# Run the data file for Griess assay for (R-FL)
+
+griess_rfl <- read_csv("griess_rfl.csv")
+
+## Plotting box plot for Griess assay data
+
+# Convert the levels of the "Treatment" variable to match the preferred order
+
+my_order <- c("VR_VFL", "R_VFL", "VR_FL", "R_FL")
+
+griess_rfl$Treatment <- factor(griess_rfl$Treatment, levels = my_order)
+
+p5 <- ggplot(griess_rfl, aes(x = Treatment, y = Value, fill = Treatment)) +
+  geom_boxplot(fill = "gray", color = "black") +
+  stat_summary(fun = "mean", geom = "point", shape = 18, size = 3, color = "black") +
+  labs(x = "Treatment Groups",
+       y = "NO Release (% of Control)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 0),  # Rotate x-axis labels
+        axis.title = element_text(size = 12),  # Adjust axis label size
+        axis.text = element_text(size = 10),   # Adjust axis text size
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Adjust plot title size and weight
+        panel.grid.major = element_blank(),  # Remove major gridlines
+        panel.grid.minor = element_blank(),  # Remove minor gridlines
+        panel.border = element_blank(),  # Remove border around plot area
+        plot.background = element_rect(fill = "white"), # Set plot background color
+        legend.position = "none") +
+  geom_signif(comparisons = list(
+      c("VR_VFL", "R_VFL"),
+      c("VR_VFL", "R_FL"),
+      c("R_VFL", "VR_FL"),
+      c("VR_FL", "R_FL")),
+    annotations = c("***", "***", "***", "***"),
+    map_signif_level = TRUE, 
+    y_position = c(1050, 1150, 1250, 1350),
+  tip_length = 0.02,
+  textsize = 4,
+  vjust = -0.2)
+    
+# Dataset structure inspection prior running the statistical test
+
+str(griess_rfl)
+
+griess_rfl$log_value <- log(griess_rfl$Nvalue)
+
+write.csv(griess_rfl, "griess_rfl.csv")
+
+# Converting the variables to 'factor variables' to run 'lmer'
+
+griess_rfl$R <- as.factor(griess_rfl$R)
+griess_rfl$Treatment <- as.factor(griess_rfl$Treatment)
+griess_rfl$FL <- as.factor(griess_rfl$FL)
+griess_rfl$Day <- as.factor(griess_rfl$Day)
+
+# Fitting the linear mixed-effect model/Running 'lmer' statistical test for Griess assay data
+griess_rfl_lmer <- lmer(log_value ~ R * FL + (1 | Day), data = griess_rfl)
+summary(griess_rfl_lmer)
+
+#Calculating Estimated Marginal Means (EMM)
+griess_rfl_emm <- emmeans(griess_rfl_lmer, ~ R * FL)
+
+# Perform Tukey's Post-hoc Test for Griess assay data
+
+griess_rfl_tukey <- pairs(griess_rfl_emm, adjust = "tukey")
+summary(griess_rfl_tukey)
+
+#Power calculation (griess - R_FL)
+
+mean_difference <- 1.62 - 0.11  # Difference between HCA+LPS and veh+LPS
+pooled_sd <- (0.34 + 0.48) / 2  # Average of the two standard deviations
+
+cohens_d <- mean_difference / pooled_sd
+print(cohens_d)
+
+power_analysis <- pwr.t.test(d = cohens_d,
+                             sig.level = 0.05,
+                             power = 0.80,
+                             type = "two.sample",
+                             alternative = "two.sided")
+print(power_analysis)
+
+# Checking normality of data
+
+hist(griess_rfl$Nvalue, main = "Histogram of XTT Assay Data")
+hist(griess_rfl$log_value, main = "Histogram of XTT Assay Data")
+
+qqnorm(griess_rfl$Nvalue)
+qqline(griess_rfl$log_value, col = "red")
+
+hist(resid(griess_rfl_lmer), breaks = 20, main = "Histogram of Residuals", xlab = "Residuals")
+
+```
+
+```{r}
+# Run the data file for XTT assay (R-FL)
+
+xtt_rfl <- read_csv("xtt_rfl.csv")
+
+## Plotting box plot for Griess assay data
+
+# Convert the levels of the "Treatment" variable to match the preferred order
+
+my_order <- c("VR_VFL", "R_VFL", "VR_FL", "R_FL")
+
+xtt_rfl$Treatment <- factor(xtt_rfl$Treatment, levels = my_order)
+
+p6 <- ggplot(xtt_rfl, aes(x = Treatment, y = Value, fill = Treatment)) +
+  geom_boxplot(fill = "gray", color = "black") +
+  stat_summary(fun = "mean", geom = "point", shape = 18, size = 3, color = "black") +
+  labs(x = "Treatment Groups",
+       y = "Cell Proliferation (% of Control)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 0),  # Rotate x-axis labels
+        axis.title = element_text(size = 12),  # Adjust axis label size
+        axis.text = element_text(size = 10),   # Adjust axis text size
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Adjust plot title size and weight
+        panel.grid.major = element_blank(),  # Remove major gridlines
+        panel.grid.minor = element_blank(),  # Remove minor gridlines
+        panel.border = element_blank(),  # Remove border around plot area
+        plot.background = element_rect(fill = "white"), # Set plot background color
+        legend.position = "none") +
+  geom_signif(comparisons = list(
+      c("VR_VFL", "VR_FL"),
+      c("VR_VFL", "R_FL"),
+      c("R_VFL", "R_FL"),
+      c("VR_FL", "R_FL")),
+    annotations = c("*", "***", "**", "*"),
+    map_signif_level = TRUE, 
+    y_position = c(300, 330, 360, 390),
+  tip_length = 0.02,
+  textsize = 4,
+  vjust = -0.2)
+    
+
+# Dataset structure inspection prior running the statistical test
+
+str(xtt_rfl)
+
+xtt_rfl$log_value <- log(xtt_rfl$Cvalue)
+
+write.csv(xtt_rfl, "xtt_rfl.csv")
+
+# Converting the variables to 'factor variables' to run 'lmer'
+
+xtt_rfl$R <- as.factor(xtt_rfl$R)
+xtt_rfl$Treatment <- as.factor(xtt_rfl$Treatment)
+xtt_rfl$FL <- as.factor(xtt_rfl$FL)
+xtt_rfl$Day <- as.factor(xtt_rfl$Day)
+
+# Fitting the linear mixed-effect model/Running 'lmer' statistical test for Griess assay data
+xtt_rfl_lmer <- lmer(log_value ~ R * FL + (1 | Day), data = xtt_rfl)
+summary(xtt_rfl_lmer)
+
+#Calculating Estimated Marginal Means (EMM)
+xtt_rfl_emm <- emmeans(xtt_rfl_lmer, ~ R * FL)
+
+# Perform Tukey's Post-hoc Test for Griess assay data
+
+xtt_rfl_tukey <- pairs(xtt_rfl_emm, adjust = "tukey")
+summary(xtt_rfl_tukey)
+
+#Power calculation (XTT - R_FL)
+
+mean_difference <- 0.24 - 0.06  # Difference between HCA+LPS and veh+LPS
+pooled_sd <- (0.10 + 0.14) / 2  # Average of the two standard deviations
+
+cohens_d <- mean_difference / pooled_sd
+print(cohens_d)
+
+power_analysis <- pwr.t.test(d = cohens_d,
+                             sig.level = 0.05,
+                             power = 0.80,
+                             type = "two.sample",
+                             alternative = "two.sided")
+print(power_analysis)
+
+# Checking normality of data. 
+
+hist(xtt_rfl$Cvalue, main = "Histogram of griess Assay Data")
+hist(xtt_rfl$log_value, main = "Histogram of griess Assay Data")
+
+qqnorm(xtt_rfl$Cvalue)
+qqline(xtt_rfl$log_value, col = "red")
+
+hist(resid(xtt_rfl_lmer), breaks = 20, main = "Histogram of Residuals", xlab = "Residuals")
+
+```
+
+```{r}
+# Run the data file for griess assay (R-AL)
+
+griess_ral <- read_csv("griess_ral.csv")
+
+## Plotting box plot for Griess assay data
+
+# Convert the levels of the "Treatment" variable to match the preferred order
+
+my_order <- c("VR_VAL", "R_VAL", "VR_AL", "R_AL")
+
+griess_ral$Treatment <- factor(griess_ral$Treatment, levels = my_order)
+
+p7 <- ggplot(griess_ral, aes(x = Treatment, y = Value, fill = Treatment)) +
+  geom_boxplot(fill = "lightgray", color = "black") +
+  stat_summary(fun = "mean", geom = "point", shape = 18, size = 3, color = "black") +
+  labs(x = "Treatment Groups",
+       y = "NO Release (% of Control)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 0),  # Rotate x-axis labels
+        axis.title = element_text(size = 12),  # Adjust axis label size
+        axis.text = element_text(size = 10),   # Adjust axis text size
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Adjust plot title size and weight
+        panel.grid.major = element_blank(),  # Remove major gridlines
+        panel.grid.minor = element_blank(),  # Remove minor gridlines
+        panel.border = element_blank(),  # Remove border around plot area
+        plot.background = element_rect(fill = "white"), # Set plot background color
+        legend.position = "none") +
+  geom_signif(comparisons = list(
+      c("VR_VAL", "R_VAL"),
+      c("VR_VAL", "R_AL"),
+      c("R_VAL", "VR_AL"),
+      c("VR_AL", "R_AL")),
+    annotations = c("***", "***", "***", "***"),
+    map_signif_level = TRUE, 
+    y_position = c(700, 800, 900, 1000),
+  tip_length = 0.02,
+  textsize = 4,
+  vjust = -0.2)
+    
+# Dataset structure inspection prior running the statistical test
+
+str(griess_ral)
+
+griess_ral$log_value <- log(griess_ral$Nvalue + 1)
+
+write.csv(griess_ral, "griess_ral.csv")
+
+# Converting the variables to 'factor variables' to run 'lmer'
+
+griess_ral$R <- as.factor(griess_ral$R)
+griess_ral$Treatment <- as.factor(griess_ral$Treatment)
+griess_ral$AL <- as.factor(griess_ral$AL)
+griess_ral$Day <- as.factor(griess_ral$Day)
+
+# Fitting the linear mixed-effect model/Running 'lmer' statistical test for Griess assay data
+griess_ral_lmer <- lmer(log_value ~ R * AL + (1 | Day), data = griess_ral)
+summary(griess_ral_lmer)
+
+#Calculating Estimated Marginal Means (EMM)
+griess_ral_emm <- emmeans(griess_ral_lmer, ~ R * AL)
+
+# Perform Tukey's Post-hoc Test for Griess assay data
+
+griess_ral_tukey <- pairs(griess_ral_emm, adjust = "tukey")
+summary(griess_ral_tukey)
+
+#Power calculation (griess - R_AL)
+
+mean_difference <- 1.32 - 0.17  # Difference between HCA+LPS and veh+LPS
+pooled_sd <- (0.19 + 0.28) / 2  # Average of the two standard deviations
+
+cohens_d <- mean_difference / pooled_sd
+print(cohens_d)
+
+power_analysis <- pwr.t.test(d = cohens_d,
+                             sig.level = 0.05,
+                             power = 0.80,
+                             type = "two.sample",
+                             alternative = "two.sided")
+print(power_analysis)
+
+# Checking normality of data. 
+
+hist(griess_ral$Nvalue, main = "Histogram of griess Assay Data")
+hist(griess_ral$log_value, main = "Histogram of griess Assay Data")
+
+qqnorm(griess_ral$Nvalue)
+qqline(griess_ral$log_value, col = "red")
+
+hist(resid(griess_ral_lmer), breaks = 20, main = "Histogram of Residuals", xlab = "Residuals")
+
+```
+
+```{r}
+# Run the data file for XTT assay (R-AL)
+
+xtt_ral <- read_csv("xtt_ral.csv")
+
+## Plotting box plot for Griess assay data
+
+# Convert the levels of the "Treatment" variable to match the preferred order
+
+my_order <- c("VR_VAL", "R_VAL", "VR_AL", "R_AL")
+
+xtt_ral$Treatment <- factor(xtt_ral$Treatment, levels = my_order)
+
+p8 <- ggplot(xtt_ral, aes(x = Treatment, y = Value, fill = Treatment)) +
+  geom_boxplot(fill = "gray", color = "black") +
+  stat_summary(fun = "mean", geom = "point", shape = 18, size = 3, color = "black") +
+  labs(x = "Treatment Groups",
+       y = "Cell Proliferation (% of Control)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 0),  # Rotate x-axis labels
+        axis.title = element_text(size = 12),  # Adjust axis label size
+        axis.text = element_text(size = 10),   # Adjust axis text size
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Adjust plot title size and weight
+        panel.grid.major = element_blank(),  # Remove major gridlines
+        panel.grid.minor = element_blank(),  # Remove minor gridlines
+        panel.border = element_blank(),  # Remove border around plot area
+        plot.background = element_rect(fill = "white"), # Set plot background color
+        legend.position = "none") 
+    
+
+# Dataset structure inspection prior running the statistical test
+
+str(xtt_ral)
+
+xtt_ral$log_value <- log(xtt_ral$Cvalue)
+
+write.csv(xtt_ral, "xtt_ral.csv")
+
+# Converting the variables to 'factor variables' to run 'lmer'
+
+xtt_ral$R <- as.factor(xtt_ral$R)
+xtt_ral$Treatment <- as.factor(xtt_ral$Treatment)
+xtt_ral$AL <- as.factor(xtt_ral$AL)
+xtt_ral$Day <- as.factor(xtt_ral$Day)
+
+# Fitting the linear mixed-effect model/Running 'lmer' statistical test for Griess assay data
+xtt_ral_lmer <- lmer(log_value ~ R * AL + (1 | Day), data = xtt_ral)
+summary(xtt_ral_lmer)
+
+#Calculating Estimated Marginal Means (EMM)
+xtt_ral_emm <- emmeans(xtt_ral_lmer, ~ R * AL)
+
+# Perform Tukey's Post-hoc Test for Griess assay data
+
+xtt_ral_tukey <- pairs(xtt_ral_emm, adjust = "tukey")
+summary(xtt_ral_tukey)
+
+#Power calculation (XTT - R_AL)
+
+mean_difference <- 0.09 - 0.18  # Difference between HCA+LPS and veh+LPS
+pooled_sd <- (0.15 + 0.21) / 2  # Average of the two standard deviations
+
+cohens_d <- mean_difference / pooled_sd
+print(cohens_d)
+
+power_analysis <- pwr.t.test(d = cohens_d,
+                             sig.level = 0.05,
+                             power = 0.80,
+                             type = "two.sample",
+                             alternative = "two.sided")
+print(power_analysis)
+
+# Checking normality of data. 
+
+hist(xtt_ral$Cvalue, main = "Histogram of griess Assay Data")
+hist(xtt_ral$log_value, main = "Histogram of griess Assay Data")
+
+qqnorm(xtt_ral$Cvalue)
+qqline(xtt_ral$log_value, col = "red")
+
+hist(resid(xtt_ral_lmer), breaks = 20, main = "Histogram of Residuals", xlab = "Residuals")
+
+```
+
+```{r}
+combined_plot2 <- (p5 + p6) / (p7 + p8) +
+  plot_annotation(tag_levels = 'A') +
+  plot_layout(guides = "collect") +
+  theme(plot.margin = margin(15, 15, 15, 15))
+print(combined_plot2)
+
+ggsave("combined_boxplot2.png", combined_plot2, width = 15, height = 10)
+```
+
+```{r}
+# Run the data file for Griess assay (R-HCA-MIF)
+
+griess_rhcamif <- read_csv("griess_rhcamif.csv")
+
+## Plotting box plot for Griess assay data
+
+# Convert the levels of the "Treatment" variable to match the preferred order
+
+my_order <- c("VR_VHCA_VMIF", "MIF_VR_VHCA", "R_HCA_VMIF", "R_HCA_MIF")
+
+griess_rhcamif$Treatment <- factor(griess_rhcamif$Treatment, levels = my_order)
+
+ggplot(griess_rhcamif, aes(x = Treatment, y = Value, fill = Treatment)) +
+  geom_boxplot(fill = "gray", color = "black") +
+  stat_summary(fun = "mean", geom = "point", shape = 18, size = 3, color = "black") +
+  labs(x = "Treatment Groups",
+       y = "NO Release (% of Control)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 0),  # Rotate x-axis labels
+        axis.title = element_text(size = 12),  # Adjust axis label size
+        axis.text = element_text(size = 10),   # Adjust axis text size
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Adjust plot title size and weight
+        panel.grid.major = element_blank(),  # Remove major gridlines
+        panel.grid.minor = element_blank(),  # Remove minor gridlines
+        panel.border = element_blank(),  # Remove border around plot area
+        plot.background = element_rect(fill = "white"), # Set plot background color
+        legend.position = "none") +
+  geom_signif(comparisons = list(
+      c("VR_VHCA_VMIF", "R_HCA_VMIF"),
+      c("VR_VHCA_VMIF", "R_HCA_MIF"),
+      c("R_HCA_VMIF", "MIF_VR_VHCA"),
+      c("MIF_VR_VHCA", "R_HCA_MIF")),
+    annotations = c("***", "***", "***", "***"),
+    map_signif_level = TRUE, 
+    y_position = c(1700, 1900, 2100, 2300),
+  tip_length = 0.02,
+  textsize = 4,
+  vjust = -0.2)
+
+# Dataset structure inspection prior running the statistical test
+
+str(griess_rhcamif)
+
+griess_rhcamif$log_value <- log(griess_rhcamif$Nvalue + 1)
+
+write.csv(griess_rhcamif, "griess_rhcamif.csv")
+
+# Converting the variables to 'factor variables' to run 'lmer'
+
+griess_rhcamif$Treatment <- as.factor(griess_rhcamif$Treatment)
+griess_rhcamif$RHCA <- as.factor(griess_rhcamif$RHCA)
+griess_rhcamif$MIF <- as.factor(griess_rhcamif$MIF)
+griess_rhcamif$Day <- as.factor(griess_rhcamif$Day)
+
+# Fitting the linear mixed-effect model/Running 'lmer' statistical test for Griess assay data
+griess_rhcamif_lmer <- lmer(log_value ~ RHCA * MIF + (1 | Day), data = griess_rhcamif)
+summary(griess_rhcamif_lmer)
+
+#Calculating Estimated Marginal Means (EMM)
+griess_rhcamif_emm <- emmeans(griess_rhcamif_lmer, ~ RHCA * MIF)
+
+# Perform Tukey's Post-hoc Test for Griess assay data
+
+griess_rhcamif_tukey <- pairs(griess_rhcamif_emm, adjust = "tukey")
+summary(griess_rhcamif_tukey)
+
+#Power calculation (griess - RHCA_MIF)
+
+mean_difference <- 1.19 - 0.12  
+pooled_sd <- (0.19 + 0.27) / 2  
+
+cohens_d <- mean_difference / pooled_sd
+print(cohens_d)
+
+power_analysis <- pwr.t.test(d = cohens_d,
+                             sig.level = 0.05,
+                             power = 0.80,
+                             type = "two.sample",
+                             alternative = "two.sided")
+print(power_analysis)
+
+# Checking normality of data. 
+
+hist(griess_rhcamif$Nvalue, main = "Histogram of griess Assay Data")
+hist(griess_rhcamif$log_value, main = "Histogram of griess Assay Data")
+
+qqnorm(griess_rhcamif$Nvalue)
+qqline(griess_rhcamif$log_value, col = "red")
+
+hist(resid(griess_rhcamif_lmer), breaks = 20, main = "Histogram of Residuals", xlab = "Residuals")
+```
+
+```{r}
+# Run the data file for XTT assay (R-HCA-MIF)
+
+xtt_rhcamif <- read_csv("xtt_rhcamif.csv")
+
+## Plotting box plot for Griess assay data
+
+# Convert the levels of the "Treatment" variable to match the preferred order
+
+my_order <- c("VR_VHCA_VMIF", "MIF_VR_VHCA", "R_HCA_VMIF", "R_HCA_MIF")
+
+xtt_rhcamif$Treatment <- factor(xtt_rhcamif$Treatment, levels = my_order)
+
+p10 <- ggplot(xtt_rhcamif, aes(x = Treatment, y = Value, fill = Treatment)) +
+  geom_boxplot(fill = "gray", color = "black") +
+  stat_summary(fun = "mean", geom = "point", shape = 18, size = 3, color = "black") +
+  labs(x = "Treatment Groups",
+       y = "Cell proliferation (% of Control)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 0),  # Rotate x-axis labels
+        axis.title = element_text(size = 12),  # Adjust axis label size
+        axis.text = element_text(size = 10),   # Adjust axis text size
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Adjust plot title size and weight
+        panel.grid.major = element_blank(),  # Remove major gridlines
+        panel.grid.minor = element_blank(),  # Remove minor gridlines
+        panel.border = element_blank(),  # Remove border around plot area
+        plot.background = element_rect(fill = "white"), # Set plot background color
+        legend.position = "none") +
+  geom_signif(comparisons = list(
+      c("VR_VHCA_VMIF", "R_HCA_VMIF"),
+      c("VR_VHCA_VMIF", "R_HCA_MIF"),
+      c("MIF_VR_VHCA", "R_HCA_MIF")),
+    annotations = c("**", "***", "**"),
+    map_signif_level = TRUE, 
+    y_position = c(600, 700, 800),
+  tip_length = 0.02,
+  textsize = 4,
+  vjust = -0.2)
+
+# Dataset structure inspection prior running the statistical test
+
+str(xtt_rhcamif)
+
+xtt_rhcamif$log_value <- log(xtt_rhcamif$Cvalue)
+
+write.csv(xtt_rhcamif, "xtt_rhcamif.csv")
+
+# Converting the variables to 'factor variables' to run 'lmer'
+
+xtt_rhcamif$Treatment <- as.factor(xtt_rhcamif$Treatment)
+xtt_rhcamif$RHCA <- as.factor(xtt_rhcamif$RHCA)
+xtt_rhcamif$MIF <- as.factor(xtt_rhcamif$MIF)
+xtt_rhcamif$Day <- as.factor(xtt_rhcamif$Day)
+
+# Fitting the linear mixed-effect model/Running 'lmer' statistical test for Griess assay data
+xtt_rhcamif_lmer <- lmer(log_value ~ RHCA * MIF + (1 | Day), data = xtt_rhcamif)
+summary(xtt_rhcamif_lmer)
+
+#Calculating Estimated Marginal Means (EMM)
+xtt_rhcamif_emm <- emmeans(xtt_rhcamif_lmer, ~ RHCA * MIF)
+
+# Perform Tukey's Post-hoc Test for Griess assay data
+
+xtt_rhcamif_tukey <- pairs(xtt_rhcamif_emm, adjust = "tukey")
+summary(xtt_rhcamif_tukey)
+
+#Power calculation (XTT - RHCA_MIf)
+
+mean_difference <- 0.79 - -0.13  
+pooled_sd <- (0.18 + 0.26) / 2  
+
+cohens_d <- mean_difference / pooled_sd
+print(cohens_d)
+
+power_analysis <- pwr.t.test(d = cohens_d,
+                             sig.level = 0.05,
+                             power = 0.80,
+                             type = "two.sample",
+                             alternative = "two.sided")
+print(power_analysis)
+
+# Checking normality of data. 
+
+hist(xtt_rhcamif$Cvalue, main = "Histogram of griess Assay Data")
+hist(xtt_rhcamif$log_value, main = "Histogram of griess Assay Data")
+
+qqnorm(xtt_rhcamif$Cvalue)
+qqline(xtt_rhcamif$log_value, col = "red")
+
+hist(resid(xtt_rhcamif_lmer), breaks = 20, main = "Histogram of Residuals", xlab = "Residuals")
+
+```
+
+```{r}
+# Run the data file for griess assay (R-HCA-SP)
+
+griess_rhcasp <- read_csv("griess_rhcasp.csv")
+
+## Plotting box plot for Griess assay data
+
+# Convert the levels of the "Treatment" variable to match the preferred order
+
+my_order <- c("VR_VHCA_VSP", "SP_VR_VHCA", "R_HCA_VSP", "R_HCA_SP")
+
+griess_rhcasp$Treatment <- factor(griess_rhcasp$Treatment, levels = my_order)
+
+p11 <- ggplot(griess_rhcasp, aes(x = Treatment, y = Value, fill = Treatment)) +
+  geom_boxplot(fill = "gray", color = "black") +
+  stat_summary(fun = "mean", geom = "point", shape = 18, size = 3, color = "black") +
+  labs(x = "Treatment Groups",
+       y = "NO Release (% of Control)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 0),  # Rotate x-axis labels
+        axis.title = element_text(size = 12),  # Adjust axis label size
+        axis.text = element_text(size = 10),   # Adjust axis text size
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Adjust plot title size and weight
+        panel.grid.major = element_blank(),  # Remove major gridlines
+        panel.grid.minor = element_blank(),  # Remove minor gridlines
+        panel.border = element_blank(),  # Remove border around plot area
+        plot.background = element_rect(fill = "white"), # Set plot background color
+        legend.position = "none") +
+  geom_signif(comparisons = list(
+      c("VR_VHCA_VSP", "R_HCA_VSP"),
+      c("VR_VHCA_VSP", "R_HCA_SP"),
+      c("R_HCA_VSP", "SP_VR_VHCA"),
+      c("SP_VR_VHCA", "R_HCA_SP")),
+    annotations = c("***", "***", "***","***"),
+    map_signif_level = TRUE, 
+    y_position = c(1100, 1200, 1300, 1400),
+  tip_length = 0.02,
+  textsize = 4,
+  vjust = -0.2)
+
+# Dataset structure inspection prior running the statistical test
+
+str(griess_rhcasp)
+
+griess_rhcasp$log_value <- log(griess_rhcasp$Nvalue)
+
+write.csv(griess_rhcasp, "griess_rhcasp.csv")
+
+# Converting the variables to 'factor variables' to run 'lmer'
+
+griess_rhcasp$Treatment <- as.factor(griess_rhcasp$Treatment)
+griess_rhcasp$RHCA <- as.factor(griess_rhcasp$RHCA)
+griess_rhcasp$SP <- as.factor(griess_rhcasp$SP)
+griess_rhcasp$Day <- as.factor(griess_rhcasp$Day)
+
+# Fitting the linear mixed-effect model/Running 'lmer' statistical test for Griess assay data
+griess_rhcasp_lmer <- lmer(log_value ~ RHCA * SP + (1 | Day), data = griess_rhcasp)
+summary(griess_rhcasp_lmer)
+
+#Calculating Estimated Marginal Means (EMM)
+griess_rhcasp_emm <- emmeans(griess_rhcasp_lmer, ~ RHCA * SP)
+
+# Perform Tukey's Post-hoc Test for Griess assay data
+
+griess_rhcasp_tukey <- pairs(griess_rhcasp_emm, adjust = "tukey")
+summary(griess_rhcasp_tukey)
+
+#Power calculation (griess - RHCA_SP)
+
+mean_difference <- 2.02 - -0.06  
+pooled_sd <- (0.24 + 0.35) / 2  
+cohens_d <- mean_difference / pooled_sd
+print(cohens_d)
+
+power_analysis <- pwr.t.test(d = cohens_d,
+                             sig.level = 0.05,
+                             power = 0.80,
+                             type = "two.sample",
+                             alternative = "two.sided")
+print(power_analysis)
+
+# Checking normality of data. 
+
+hist(griess_rhcasp$Nvalue, main = "Histogram of griess Assay Data")
+hist(griess_rhcasp$log_value, main = "Histogram of griess Assay Data")
+
+qqnorm(griess_rhcasp$Nvalue)
+qqline(griess_rhcasp$log_value, col = "red")
+
+hist(resid(griess_rhcasp_lmer), breaks = 20, main = "Histogram of Residuals", xlab = "Residuals")
+
+```
+
+```{r}
+# Run the data file for XTT assay (R-HCA-SP)
+
+xtt_rhcasp <- read_csv("xtt_rhcasp.csv")
+
+## Plotting box plot for Griess assay data
+
+# Convert the levels of the "Treatment" variable to match the preferred order
+
+my_order <- c("VR_VHCA_VSP", "SP_VR_VHCA", "R_HCA_VSP", "R_HCA_SP")
+
+xtt_rhcasp$Treatment <- factor(xtt_rhcasp$Treatment, levels = my_order)
+
+p12 <- ggplot(xtt_rhcasp, aes(x = Treatment, y = Value, fill = Treatment)) +
+  geom_boxplot(fill = "gray", color = "black") +
+  stat_summary(fun = "mean", geom = "point", shape = 18, size = 3, color = "black") +
+  labs(x = "Treatment Groups",
+       y = "Cell Proliferation (% of Control)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 0),  # Rotate x-axis labels
+        axis.title = element_text(size = 12),  # Adjust axis label size
+        axis.text = element_text(size = 10),   # Adjust axis text size
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Adjust plot title size and weight
+        panel.grid.major = element_blank(),  # Remove major gridlines
+        panel.grid.minor = element_blank(),  # Remove minor gridlines
+        panel.border = element_blank(),  # Remove border around plot area
+        plot.background = element_rect(fill = "white"), # Set plot background color
+        legend.position = "none")
+
+# Dataset structure inspection prior running the statistical test
+
+str(xtt_rhcasp)
+
+xtt_rhcasp$log_value <- log(xtt_rhcasp$Cvalue)
+
+write.csv(xtt_rhcasp, "xtt_rhcasp.csv")
+
+# Converting the variables to 'factor variables' to run 'lmer'
+
+xtt_rhcasp$Treatment <- as.factor(xtt_rhcasp$Treatment)
+xtt_rhcasp$RHCA <- as.factor(xtt_rhcasp$RHCA)
+xtt_rhcasp$SP <- as.factor(xtt_rhcasp$SP)
+xtt_rhcasp$Day <- as.factor(xtt_rhcasp$Day)
+
+# Fitting the linear mixed-effect model/Running 'lmer' statistical test for Griess assay data
+xtt_rhcasp_lmer <- lmer(log_value ~ RHCA * SP + (1 | Day), data = xtt_rhcasp)
+summary(xtt_rhcasp_lmer)
+
+#Calculating Estimated Marginal Means (EMM)
+xtt_rhcasp_emm <- emmeans(xtt_rhcasp_lmer, ~ RHCA * SP)
+
+# Perform Tukey's Post-hoc Test for Griess assay data
+
+xtt_rhcasp_tukey <- pairs(xtt_rhcasp_emm, adjust = "tukey")
+summary(xtt_rhcasp_tukey)
+
+#Power calculation (XTT - RHCA_SP)
+
+mean_difference <- 0.65 - -0.53  
+pooled_sd <- (0.36 + 0.51) / 2  
+
+cohens_d <- mean_difference / pooled_sd
+print(cohens_d)
+
+power_analysis <- pwr.t.test(d = cohens_d,
+                             sig.level = 0.05,
+                             power = 0.80,
+                             type = "two.sample",
+                             alternative = "two.sided")
+print(power_analysis)
+
+# Checking normality of data. 
+
+hist(xtt_rhcasp$Cvalue, main = "Histogram of griess Assay Data")
+hist(xtt_rhcasp$log_value, main = "Histogram of griess Assay Data")
+
+qqnorm(xtt_rhcasp$Cvalue)
+qqline(xtt_rhcasp$log_value, col = "red")
+
+hist(resid(xtt_rhcasp_lmer), breaks = 20, main = "Histogram of Residuals", xlab = "Residuals")
+
+```
+
+```{r}
+combined_plot3 <- (p9 + p10) / (p11 + p12) +
+  plot_annotation(tag_levels = 'A') +
+  plot_layout(guides = "collect") +
+  theme(plot.margin = margin(15, 15, 15, 15))
+print(combined_plot3)
+
+ggsave("combined_boxplot3.png", combined_plot3, width = 15, height = 10)
+```
+
+```{r}
+# Run the data file for Griess assay (R-HCA-PD)
+
+griess_rhcapd <- read_csv("griess_rhcapd.csv")
+
+## Plotting box plot for Griess assay data
+
+# Convert the levels of the "Treatment" variable to match the preferred order
+
+my_order <- c("VR_VHCA_VPD", "PD_VR_VHCA", "R_HCA_VPD", "R_HCA_PD")
+
+griess_rhcapd$Treatment <- factor(griess_rhcapd$Treatment, levels = my_order)
+
+p13 <- ggplot(griess_rhcapd, aes(x = Treatment, y = Value, fill = Treatment)) +
+  geom_boxplot(fill = "gray", color = "black") +
+  stat_summary(fun = "mean", geom = "point", shape = 18, size = 3, color = "black") +
+  labs(x = "Treatment Groups",
+       y = "NO production (% of Control)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 0),  # Rotate x-axis labels
+        axis.title = element_text(size = 12),  # Adjust axis label size
+        axis.text = element_text(size = 10),   # Adjust axis text size
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Adjust plot title size and weight
+        panel.grid.major = element_blank(),  # Remove major gridlines
+        panel.grid.minor = element_blank(),  # Remove minor gridlines
+        panel.border = element_blank(),  # Remove border around plot area
+        plot.background = element_rect(fill = "white"), # Set plot background color
+        legend.position = "none") +
+  geom_signif(comparisons = list(
+      c("VR_VHCA_VPD", "R_HCA_VPD"),
+      c("VR_VHCA_VPD", "R_HCA_PD"),
+      c("R_HCA_VPD", "PD_VR_VHCA"),
+      c("PD_VR_VHCA", "R_HCA_PD")),
+    annotations = c("**", "**", "*", "**"),
+    map_signif_level = TRUE, 
+    y_position = c(600, 700, 800, 900),
+  tip_length = 0.02,
+  textsize = 4,
+  vjust = -0.2)
+
+# Dataset structure inspection prior running the statistical test
+
+str(griess_rhcapd)
+
+griess_rhcapd$log_value <- log(griess_rhcapd$Nvalue + 1)
+
+write.csv(griess_rhcapd, "griess_rhcapd.csv")
+
+# Converting the variables to 'factor variables' to run 'lmer'
+
+griess_rhcapd$Treatment <- as.factor(griess_rhcapd$Treatment)
+griess_rhcapd$RHCA <- as.factor(griess_rhcapd$RHCA)
+griess_rhcapd$PD <- as.factor(griess_rhcapd$PD)
+griess_rhcapd$Day <- as.factor(griess_rhcapd$Day)
+
+# Fitting the linear mixed-effect model/Running 'lmer' statistical test for Griess assay data
+griess_rhcapd_lmer <- lmer(log_value ~ RHCA * PD + (1 | Day), data = griess_rhcapd)
+summary(griess_rhcapd_lmer)
+
+hist(resid(griess_rhcapd_lmer), breaks = 20, main = "Histogram of Residuals", xlab = "Residuals")
+
+#Calculating Estimated Marginal Means (EMM)
+griess_rhcapd_emm <- emmeans(griess_rhcapd_lmer, ~ RHCA * PD)
+
+# Perform Tukey's Post-hoc Test for Griess assay data
+
+griess_rhcapd_tukey <- pairs(griess_rhcapd_emm, adjust = "tukey")
+summary(griess_rhcapd_tukey)
+
+#Power calculation (griess - RHCA_PD)
+
+mean_difference <- 0.63 - -0.01  
+pooled_sd <- (0.16 + 0.23) / 2  
+
+cohens_d <- mean_difference / pooled_sd
+print(cohens_d)
+
+power_analysis <- pwr.t.test(d = cohens_d,
+                             sig.level = 0.05,
+                             power = 0.80,
+                             type = "two.sample",
+                             alternative = "two.sided")
+print(power_analysis)
+
+# Checking normality of data. 
+
+hist(griess_rhcapd$Nvalue, main = "Histogram of griess Assay Data")
+hist(griess_rhcapd$log_value, main = "Histogram of griess Assay Data")
+
+qqnorm(griess_rhcapd$Nvalue)
+qqline(griess_rhcapd$log_value, col = "red")
+
+hist(resid(griess_rhcapd_lmer), breaks = 20, main = "Histogram of Residuals", xlab = "Residuals")
+
+```
+
+```{r}
+# Run the data file for XTT assay (R-HCA-PD)
+
+xtt_rhcapd <- read_csv("xtt_rhcapd.csv")
+
+## Plotting box plot for XTT assay data
+
+# Convert the levels of the "Treatment" variable to match the preferred order
+
+my_order <- c("VR_VHCA_VPD", "PD_VR_VHCA", "R_HCA_VPD", "R_HCA_PD")
+
+xtt_rhcapd$Treatment <- factor(xtt_rhcapd$Treatment, levels = my_order)
+
+p14 <- ggplot(xtt_rhcapd, aes(x = Treatment, y = Value, fill = Treatment)) +
+  geom_boxplot(fill = "gray", color = "black") +
+  stat_summary(fun = "mean", geom = "point", shape = 18, size = 3, color = "black") +
+  labs(x = "Treatment Groups",
+       y = "Cell proliferation (% of Control)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 0),  # Rotate x-axis labels
+        axis.title = element_text(size = 12),  # Adjust axis label size
+        axis.text = element_text(size = 10),   # Adjust axis text size
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Adjust plot title size and weight
+        panel.grid.major = element_blank(),  # Remove major gridlines
+        panel.grid.minor = element_blank(),  # Remove minor gridlines
+        panel.border = element_blank(),  # Remove border around plot area
+        plot.background = element_rect(fill = "white"), # Set plot background color
+        legend.position = "none") +
+  geom_signif(comparisons = list(
+      c("VR_VHCA_VPD", "R_HCA_VPD"),
+      c("VR_VHCA_VPD", "R_HCA_PD"),
+      c("R_HCA_VPD", "PD_VR_VHCA"),
+      c("PD_VR_VHCA", "R_HCA_PD")),
+    annotations = c("***", "***", "***", "***"),
+    map_signif_level = TRUE, 
+    y_position = c(900, 1000, 1100, 1200),
+  tip_length = 0.02,
+  textsize = 4,
+  vjust = -0.2)
+    
+# Dataset structure inspection prior running the statistical test
+
+str(xtt_rhcapd)
+
+xtt_rhcapd$log_value <- log(xtt_rhcapd$Cvalue)
+
+write.csv(xtt_rhcapd, "xtt_rhcapd.csv")
+
+# Converting the variables to 'factor variables' to run 'lmer'
+
+xtt_rhcapd$Treatment <- as.factor(xtt_rhcapd$Treatment)
+xtt_rhcapd$RHCA <- as.factor(xtt_rhcapd$RHCA)
+xtt_rhcapd$PD <- as.factor(xtt_rhcapd$PD)
+xtt_rhcapd$Day <- as.factor(xtt_rhcapd$Day)
+
+# Fitting the linear mixed-effect model/Running 'lmer' statistical test for Griess assay data
+xtt_rhcapd_lmer <- lmer(log_value ~ RHCA * PD + (1 | Day), data = xtt_rhcapd)
+summary(xtt_rhcapd_lmer)
+
+hist(resid(xtt_rhcapd_lmer), breaks = 20, main = "Histogram of Residuals", xlab = "Residuals")
+
+#Calculating Estimated Marginal Means (EMM)
+xtt_rhcapd_emm <- emmeans(xtt_rhcapd_lmer, ~ RHCA * PD)
+
+# Perform Tukey's Post-hoc Test for Griess assay data
+
+xtt_rhcapd_tukey <- pairs(xtt_rhcapd_emm, adjust = "tukey")
+summary(xtt_rhcapd_tukey)
+
+#Power calculation (XTT - RHCA_PD)
+
+mean_difference <- 1.23 - -0.14  
+pooled_sd <- (0.19 + 0.27) / 2  
+
+cohens_d <- mean_difference / pooled_sd
+print(cohens_d)
+
+power_analysis <- pwr.t.test(d = cohens_d,
+                             sig.level = 0.05,
+                             power = 0.80,
+                             type = "two.sample",
+                             alternative = "two.sided")
+print(power_analysis)
+
+# Checking normality of data. 
+
+hist(xtt_rhcapd$Cvalue, main = "Histogram of griess Assay Data")
+hist(xtt_rhcapd$log_value, main = "Histogram of griess Assay Data")
+
+qqnorm(xtt_rhcapd$Cvalue)
+qqline(xtt_rhcapd$log_value, col = "red")
+
+hist(resid(xtt_rhcapd_lmer), breaks = 20, main = "Histogram of Residuals", xlab = "Residuals")
+```
+
+```{r}
+# Run the data file for Griess assay R-HCA-SB
+
+griess_rhcasb <- read_csv("griess_rhcasb.csv")
+
+## Plotting box plot for Griess assay data
+
+# Convert the levels of the "Treatment" variable to match the preferred order
+
+my_order <- c("VR_VHCA_VSB", "SB_VR_VHCA", "R_HCA_VSB", "R_HCA_SB")
+
+griess_rhcasb$Treatment <- factor(griess_rhcasb$Treatment, levels = my_order)
+
+p15 <- ggplot(griess_rhcasb, aes(x = Treatment, y = Value, fill = Treatment)) +
+  geom_boxplot(fill = "gray", color = "black") +
+  stat_summary(fun = "mean", geom = "point", shape = 18, size = 3, color = "black") +
+  labs(x = "Treatment Groups",
+       y = "NO production (% of Control)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 0),  # Rotate x-axis labels
+        axis.title = element_text(size = 12),  # Adjust axis label size
+        axis.text = element_text(size = 10),   # Adjust axis text size
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Adjust plot title size and weight
+        panel.grid.major = element_blank(),  # Remove major gridlines
+        panel.grid.minor = element_blank(),  # Remove minor gridlines
+        panel.border = element_blank(),  # Remove border around plot area
+        plot.background = element_rect(fill = "white"), # Set plot background color
+        legend.position = "none") +
+  geom_signif(comparisons = list(
+      c("VR_VHCA_VSB", "R_HCA_VSB"),
+      c("VR_VHCA_VSB", "R_HCA_SB"),
+      c("R_HCA_VSB", "SB_VR_VHCA"),
+      c("R_HCA_VSB", "R_HCA_SB"),
+      c("SB_VR_VHCA", "R_HCA_SB")),
+    annotations = c("***", "***", "***", "***", "***"),
+    map_signif_level = TRUE, 
+    y_position = c(750, 850, 950, 1050, 1150),
+  tip_length = 0.02,
+  textsize = 4,
+  vjust = -0.2)
+
+# Dataset structure inspection prior running the statistical test
+
+str(griess_rhcasb)
+
+griess_rhcasb$log_value <- log(griess_rhcasb$Nvalue)
+
+write.csv(griess_rhcasb, "griess_rhcasb.csv")
+
+# Converting the variables to 'factor variables' to run 'lmer'
+
+griess_rhcasb$Treatment <- as.factor(griess_rhcasb$Treatment)
+griess_rhcasb$RHCA <- as.factor(griess_rhcasb$RHCA)
+griess_rhcasb$SB <- as.factor(griess_rhcasb$SB)
+griess_rhcasb$Day <- as.factor(griess_rhcasb$Day)
+
+# Fitting the linear mixed-effect model/Running 'lmer' statistical test for Griess assay data
+griess_rhcasb_lmer <- lmer(log_value ~ RHCA * SB + (1 | Day), data = griess_rhcasb)
+summary(griess_rhcasb_lmer)
+
+#Calculating Estimated Marginal Means (EMM)
+griess_rhcasb_emm <- emmeans(griess_rhcasb_lmer, ~ RHCA * SB)
+
+# Perform Tukey's Post-hoc Test for Griess assay data
+
+griess_rhcasb_tukey <- pairs(griess_rhcasb_emm, adjust = "tukey")
+summary(griess_rhcasb_tukey)
+
+#Power calculation (griess - RHCA_SB)
+
+mean_difference <- 0.96 - 1.14  
+pooled_sd <- (0.17 + 0.25) / 2  
+
+cohens_d <- mean_difference / pooled_sd
+print(cohens_d)
+
+power_analysis <- pwr.t.test(d = cohens_d,
+                             sig.level = 0.05,
+                             power = 0.80,
+                             type = "two.sample",
+                             alternative = "two.sided")
+print(power_analysis)
+
+# Checking normality of data. 
+
+hist(griess_rhcasb$Nvalue, main = "Histogram of griess Assay Data")
+hist(griess_rhcasb$log_value, main = "Histogram of griess Assay Data")
+
+qqnorm(griess_rhcasb$Nvalue)
+qqline(griess_rhcasb$log_value, col = "red")
+
+hist(resid(griess_rhcasb_lmer), breaks = 20, main = "Histogram of Residuals", xlab = "Residuals")
+
+```
+
+```{r}
+# Run the data file for XTT assay (R-HCA-SB)
+
+xtt_rhcasb <- read_csv("xtt_rhcasb.csv")
+
+## Plotting box plot for XTT assay data
+
+# Convert the levels of the "Treatment" variable to match the preferred order
+
+my_order <- c("VR_VHCA_VSB", "SB_VR_VHCA", "R_HCA_VSB", "R_HCA_SB")
+
+xtt_rhcasb$Treatment <- factor(xtt_rhcasb$Treatment, levels = my_order)
+
+p16 <- ggplot(xtt_rhcasb, aes(x = Treatment, y = Value, fill = Treatment)) +
+  geom_boxplot(fill = "gray", color = "black") +
+  stat_summary(fun = "mean", geom = "point", shape = 18, size = 3, color = "black") +
+  labs(x = "Treatment Groups",
+       y = "Cell proliferation (% of Control)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 0),  # Rotate x-axis labels
+        axis.title = element_text(size = 12),  # Adjust axis label size
+        axis.text = element_text(size = 10),   # Adjust axis text size
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Adjust plot title size and weight
+        panel.grid.major = element_blank(),  # Remove major gridlines
+        panel.grid.minor = element_blank(),  # Remove minor gridlines
+        panel.border = element_blank(),  # Remove border around plot area
+        plot.background = element_rect(fill = "white"), # Set plot background color
+        legend.position = "none") +
+  geom_signif(comparisons = list(
+      c("VR_VHCA_VSB", "R_HCA_VSB"),
+      c("VR_VHCA_VSB", "R_HCA_SB"),
+      c("R_HCA_VSB", "SB_VR_VHCA"),
+      c("SB_VR_VHCA", "R_HCA_SB")),
+    annotations = c("***", "***", "***", "***"),
+    map_signif_level = TRUE, 
+    y_position = c(440, 490, 540, 590),
+  tip_length = 0.02,
+  textsize = 4,
+  vjust = -0.2)
+    
+# Dataset structure inspection prior running the statistical test
+
+str(xtt_rhcasb)
+
+xtt_rhcasb$log_value <- log(xtt_rhcasb$Cvalue)
+
+write.csv(xtt_rhcasb, "xtt_rhcasb.csv")
+
+# Converting the variables to 'factor variables' to run 'lmer'
+
+xtt_rhcasb$Treatment <- as.factor(xtt_rhcasb$Treatment)
+xtt_rhcasb$RHCA <- as.factor(xtt_rhcasb$RHCA)
+xtt_rhcasb$SB <- as.factor(xtt_rhcasb$SB)
+xtt_rhcasb$Day <- as.factor(xtt_rhcasb$Day)
+
+# Fitting the linear mixed-effect model/Running 'lmer' statistical test for Griess assay data
+xtt_rhcasb_lmer <- lmer(log_value ~ RHCA * SB + (1 | Day), data = xtt_rhcasb)
+summary(xtt_rhcasb_lmer)
+
+#Calculating Estimated Marginal Means (EMM)
+xtt_rhcasb_emm <- emmeans(xtt_rhcasb_lmer, ~ RHCA * SB)
+
+# Perform Tukey's Post-hoc Test for Griess assay data
+
+xtt_rhcasb_tukey <- pairs(xtt_rhcasb_emm, adjust = "tukey")
+summary(xtt_rhcasb_tukey)
+
+#Power calculation (XTT - RHCA_SB)
+
+mean_difference <- 0.86 - -0.16  
+pooled_sd <- (0.12 + 0.17) / 2  
+
+cohens_d <- mean_difference / pooled_sd
+print(cohens_d)
+
+power_analysis <- pwr.t.test(d = cohens_d,
+                             sig.level = 0.05,
+                             power = 0.80,
+                             type = "two.sample",
+                             alternative = "two.sided")
+print(power_analysis)
+
+# Checking normality of data. 
+
+hist(xtt_rhcasb$Cvalue, main = "Histogram of griess Assay Data")
+hist(xtt_rhcasb$log_value, main = "Histogram of griess Assay Data")
+
+qqnorm(xtt_rhcasb$Cvalue)
+qqline(xtt_rhcasb$log_value, col = "red")
+
+hist(resid(xtt_rhcasb_lmer), breaks = 20, main = "Histogram of Residuals", xlab = "Residuals")
+```
+
+```{r}
+combined_plot4 <- (p13 + p14) / (p15 + p16) +
+  plot_annotation(tag_levels = 'A') +
+  plot_layout(guides = "collect") +
+  theme(plot.margin = margin(15, 15, 15, 15))
+print(combined_plot4)
+
+ggsave("combined_boxplot4.png", combined_plot4, width = 15, height = 10)
+```
