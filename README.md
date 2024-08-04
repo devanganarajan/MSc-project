@@ -54,12 +54,14 @@ The XTT analysis CSV files contain the following columns:
 
 ## **Data Processing**
 
-1. **Log Transformation:** 
-   - For Griess data, the `log_value` column is calculated as the natural logarithm of the `Nvalue` column, with 1 added to specifically some analyses as to prevent taking the logarithm of those data points having a value of '0'.
-   - For XTT data, the `log_value` column is calculated as the natural logarithm of the `Cvalue` column.
-
-2. **Normalization:**
+1. **Normalization:**
    - The `Value` column in the Griess data is derived from the normalization of the original NO data points to the control vehicle values, ensuring that the analyses are comparable across treatment groups.
    - The `Value` column in the XTT data is similarly derived from normalization of the original CP data points.
 
+2.  **Log Transformation:** 
+   - For Griess data, the `log_value` column is calculated as the natural logarithm of the `Nvalue` column, with 1 added to specifically some analyses as to prevent taking the logarithm of those data points having a value of '0'.
+   - For XTT data, the `log_value` column is calculated as the natural logarithm of the `Cvalue` column.
 
+## **R Code for Analyses**
+
+All R codes used for the analyses is contained in the `MScProjectR.Rmd` file. This R Markdown file includes the data processing, statistical analyses, and visualizations performed as part of this project.
