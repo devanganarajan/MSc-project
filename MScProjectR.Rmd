@@ -160,7 +160,7 @@ write.csv(xtt_lpshca, "xtt_lpshca.csv")
 
 # Converting the variables to 'factor variables' to run 'lmer'
 
-xtt_lpshca$LPS <- as.factor(griess_rhca$LPS)
+xtt_lpshca$LPS <- as.factor(xtt_lpshca$LPS)
 xtt_lpshca$Treatment <- as.factor(xtt_lpshca$Treatment)
 xtt_lpshca$HCA <- as.factor(xtt_lpshca$HCA)
 xtt_lpshca$Day <- as.factor(xtt_lpshca$Day)
